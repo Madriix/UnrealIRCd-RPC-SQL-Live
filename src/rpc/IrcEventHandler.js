@@ -14,6 +14,7 @@ class IrcEventHandler {
         this.rpc = unrealircdRpc;
         this.unrealircd_channels = new UnrealIRCdChannels();
         this.usersCount = 0;
+        this._users = new Map();
 
         // File d'attente unique → pas de conflits DB
         this.queue = new PQueue({ concurrency: 1 });
@@ -87,6 +88,9 @@ class IrcEventHandler {
 
     async unrealircd_users() {
         const users = await this.rpc.listUsers(4);
+        users.forEach(user => {
+            this._users.set(user.name, user);
+        });
         this.usersCount = users.length;
         //console.log('[SYNC] users count:', this.usersCount);
         process.stdout.write(`\r[SYNC] users count: \x1b[33m${this.usersCount}\x1b[0m\r`);
@@ -99,7 +103,9 @@ class IrcEventHandler {
         const placeholders = [];
         const values = [];
 
-        for (const user of users) {
+        const usersArray = Array.from(this._users.values());
+
+        for (const user of usersArray) {
             placeholders.push('(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
             values.push(...this.mapUser(user));
         }
@@ -198,6 +204,7 @@ class IrcEventHandler {
 
     async clientUpsert(user, withTopCountries = null, target = null) {
         if (target == 'connect') {
+            this._users.set(user.client.name, user.client)
             this.usersCount++;
             //console.log('[SYNC] users count:', this.usersCount);
             logger.debug(`\x1b[32m[Connect] ${user.client.name}!${user.client.user.username}@${user.client.ip} has connected\x1b[0m on server IRC. User count: \x1b[33m${this.usersCount}\x1b[0m`);
@@ -240,6 +247,7 @@ class IrcEventHandler {
     }
 
     async clientDelete(user) {
+        this._users.delete(user.client.name)
         this.usersCount--;
         //console.log('[SYNC] users count:', this.usersCount);
         logger.debug(`\x1b[31m[Disconnect] ${user.client.name}!${user.client.user.username}@${user.client.ip} has disconnected\x1b[0m on server IRC. User count: \x1b[33m${this.usersCount}\x1b[0m`);
@@ -263,6 +271,11 @@ class IrcEventHandler {
     }
 
     async nickChange(oldNick, newNick) {
+
+        const user = this._users.get(oldNick);
+        this._users.delete(oldNick);
+        this._users.set(newNick, user);
+
         const usersTable = config.mysql.table_prefix + 'users';
         await execute(
             `UPDATE ${usersTable} SET name = ? WHERE name = ?`,
