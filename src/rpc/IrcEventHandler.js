@@ -177,9 +177,12 @@ class IrcEventHandler {
             case 'LOCAL_NICK_CHANGE':
             case 'REMOTE_NICK_CHANGE':
                 return this.enqueue(() =>
-                    this.nickChange(data.client.name, data.new_nick)
+                    this.nickChange(data)
                 );
-
+            case 'FORCED_NICK_CHANGE':
+                return this.enqueue(() =>
+                    this.forcedNickChange(data)
+                );
             case 'LOCAL_CLIENT_JOIN':
             case 'REMOTE_CLIENT_JOIN':
                 return this.enqueue(() =>
@@ -195,6 +198,8 @@ class IrcEventHandler {
                 return this.enqueue(() =>
                     this.clientUpsert(data, null, 'kick')
                 );
+            default:
+            //console.log(data)
         }
     }
 
@@ -270,18 +275,34 @@ class IrcEventHandler {
 
     }
 
-    async nickChange(oldNick, newNick) {
+    async nickChange(user) {
 
-        const user = this._users.get(oldNick);
-        this._users.delete(oldNick);
-        this._users.set(newNick, user);
+        logger.debug(`\x1b[32m[Nick change] ${user.client.name} changes his nickname to ${user.new_nick}\x1b[0m`);
+
+        this._users.delete(user.client.name);
+        this._users.set(user.new_nick, user);
 
         const usersTable = config.mysql.table_prefix + 'users';
         await execute(
-            `UPDATE ${usersTable} SET name = ? WHERE name = ?`,
-            [newNick, oldNick]
+            `UPDATE ${usersTable} SET name = ? WHERE name = ? LIMIT 1`,
+            [user.new_nick, user.client.name]
         );
     }
+
+    async forcedNickChange(user) {
+
+        logger.debug(`\x1b[32m[Forced nick change] ${user.client.name} changes his nickname to ${user.new_nick_name}\x1b[0m`);
+
+        this._users.delete(user.client.name);
+        this._users.set(user.new_nick_name, user);
+
+        const usersTable = config.mysql.table_prefix + 'users';
+        await execute(
+            `UPDATE ${usersTable} SET name = ? WHERE name = ? LIMIT 1`,
+            [user.new_nick_name, user.client.name]
+        );
+    }
+
 }
 
 module.exports = IrcEventHandler;
