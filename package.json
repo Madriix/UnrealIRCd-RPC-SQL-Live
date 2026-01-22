@@ -1,0 +1,20 @@
+{
+  "name": "unrealircd-rpc-sql-live",
+  "version": "1.0.0",
+  "description": "Its purpose is to enable the live recording of UnrealIRCd JSON-RPC data into a MySQL/MariaDB database, additionally aided by a bot connected to the IRC server.",
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "main": "unrealrpc.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node unrealrpc.js"
+  },
+  "dependencies": {
+    "irc-framework": "^4.14.0",
+    "mysql2": "^3.16.1",
+    "p-queue": "^9.1.0",
+    "unrealircd-rpc-node": "^1.0.7",
+    "winston": "^3.19.0"
+  }
+}
