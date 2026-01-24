@@ -1,7 +1,7 @@
 const config = require('./../../config');
 const { UnrealIRCdRpc, unrealircdRpc } = require('unrealircd-rpc-node');
 const PQueue = require('p-queue').default;
-const { execute } = require("./../sql/db");
+const db = require("./../sql/db");
 const top_countries = require('./../sql/top_countries')
 const UnrealIRCdChannels = require('./../sql/channels')
 const Logger = require('./../logger/Logger');
@@ -18,6 +18,35 @@ class IrcEventHandler {
 
         // File d'attente unique → pas de conflits DB
         this.queue = new PQueue({ concurrency: 1 });
+
+        this.connection_was_down = false;
+
+        this.events = db.events;
+
+        this.bot = null;
+
+        this.events.on('up', async () => {
+            if (this.connection_was_down) {
+                console.log('MySQL prêt, démarrage des services...');
+                this.queue.clear();
+                this._users.clear();
+                this.connection_was_down = false;
+                this.bot.disconnect();
+                setTimeout(() => {
+                    this.bot.prepareConnection();
+                }, 1000);
+            }
+        });
+
+        this.events.on('down', (err) => {
+            console.error('MySQL down:', err.message);
+            this.connection_was_down = true;
+        });
+
+    }
+
+    setBot(bot) {
+        this.bot = bot;
     }
 
     /* -------------------------------------------------- */
@@ -87,6 +116,7 @@ class IrcEventHandler {
     /* -------------------------------------------------- */
 
     async unrealircd_users() {
+        this._users.clear();
         const users = await this.rpc.listUsers(4);
         users.forEach(user => {
             this._users.set(user.name, user);
@@ -135,7 +165,7 @@ class IrcEventHandler {
                 away_since = VALUES(away_since)
         `;
 
-        await execute(sql, values);
+        await db.execute(sql, values);
 
         const countriesTable = config.mysql.table_prefix + 'top_countries';
         console.log(`[SYNC] ${countriesTable} START`);
@@ -158,6 +188,20 @@ class IrcEventHandler {
 
     async sendJson(event) {
         if (!event?.tags?.['unrealircd.org/json-log']) return;
+
+        if (this.connection_was_down && db.isOnline()) {
+            console.log('MySQL prêt, démarrage des services...');
+            this.queue.clear();
+            this._users.clear();
+            this.connection_was_down = false;
+            this.bot.disconnect();
+            setTimeout(() => {
+                this.bot.prepareConnection();
+            }, 1000);
+
+            return;
+        }
+
 
         const data = JSON.parse(event.tags['unrealircd.org/json-log']);
 
@@ -232,7 +276,7 @@ class IrcEventHandler {
                 country_code = VALUES(country_code)
         `;
 
-        await execute(sql, this.mapUser(user.client));
+        await db.execute(sql, this.mapUser(user.client));
 
         if (withTopCountries)
             await this.rebuildTopCountries();
@@ -265,7 +309,7 @@ class IrcEventHandler {
         }
 
         const usersTable = config.mysql.table_prefix + 'users';
-        await execute(
+        await db.execute(
             `DELETE FROM ${usersTable} WHERE id_user = ?`,
             [user.client.id]
         );
@@ -283,7 +327,7 @@ class IrcEventHandler {
         this._users.set(user.new_nick, user);
 
         const usersTable = config.mysql.table_prefix + 'users';
-        await execute(
+        await db.execute(
             `UPDATE ${usersTable} SET name = ? WHERE name = ? LIMIT 1`,
             [user.new_nick, user.client.name]
         );
@@ -297,7 +341,7 @@ class IrcEventHandler {
         this._users.set(user.new_nick_name, user);
 
         const usersTable = config.mysql.table_prefix + 'users';
-        await execute(
+        await db.execute(
             `UPDATE ${usersTable} SET name = ? WHERE name = ? LIMIT 1`,
             [user.new_nick_name, user.client.name]
         );

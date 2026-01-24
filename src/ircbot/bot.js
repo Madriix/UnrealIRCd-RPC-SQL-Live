@@ -1,16 +1,16 @@
 const config = require('./../../config');
 const IRC = require('irc-framework');
-//const UnrealIRCdChannels = require('./../sql/channels')
-const Trivia = require('./../trivia/Trivia')
+const IrcEventHandler = require('./../rpc/IrcEventHandler.js');
+const Trivia = require('./../trivia/Trivia');
+const { createTables, truncate } = require('./../sql/tables')
 
 class IRCBot {
-    constructor(EventHandler) {
+    constructor() {
         this.config = {
             ...config
         };
         this.bot = null;
-        this.IrcEventHandler = EventHandler;
-        //this.unrealircd_channels = new UnrealIRCdChannels();
+        this.IrcEventHandler = new IrcEventHandler();
         this.trivia = null;
     }
 
@@ -30,9 +30,20 @@ class IRCBot {
         }
     }
 
+    async prepareConnection() {
+        const created = await createTables();
+        const truncateTables = await truncate();
+        if (created && truncateTables) {
+            this.connect();
+        }
+    }
+
     connect() {
-        this.bot = new IRC.Client();
-        this.bot.use(this.MyIrcMiddleware(this));
+        if (!this.bot) {
+            this.bot = new IRC.Client();
+            this.IrcEventHandler.setBot(this);
+            this.bot.use(this.MyIrcMiddleware(this));
+        }
         this.bot.connect({
             ...this.config.ircbot
         });
@@ -46,7 +57,7 @@ class IRCBot {
 
         this.bot.on('registered', this.handleRegistered.bind(this));
         this.bot.on('close', this.handleClose.bind(this));
-        
+
         if (config.trivia.enable) {
             this.bot.on('message', this.handleMessage.bind(this));
             if (config.trivia.welcome_message_on_join)
@@ -117,8 +128,7 @@ class IRCBot {
     disconnect() {
         if (this.bot) {
             console.log('Disconnecting...');
-            this.bot.disconnect();
-            this.bot = null;
+            this.bot.quit();
         }
     }
 

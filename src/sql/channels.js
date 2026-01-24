@@ -1,5 +1,5 @@
 const config = require('./../../config');
-const { execute } = require("./db");
+const db = require("./db");
 const { UnrealIRCdRpc, unrealircdRpc } = require('unrealircd-rpc-node');
 const Logger = require('./../logger/Logger');
 const logger = new Logger();
@@ -23,7 +23,7 @@ module.exports = class UnrealIRCdChannels {
 
     async tableExists() {
         try {
-            await execute(`SELECT 1 FROM \`${this.table}\` LIMIT 1`);
+            await db.execute(`SELECT 1 FROM \`${this.table}\` LIMIT 1`);
             return true;
         } catch (error) {
             if (error.code !== 'ER_NO_SUCH_TABLE') {
@@ -91,13 +91,13 @@ module.exports = class UnrealIRCdChannels {
             COLLATE=utf8mb4_unicode_ci;
         `;
 
-        await execute(sql);
+        await db.execute(sql);
         logger.debug(`✅ Table ${this.table} created with ${allColumns.size} columns`);
     }
 
     async recreateTable() {
         try {
-            await execute(`DROP TABLE IF EXISTS \`${this.table}\``);
+            await db.execute(`DROP TABLE IF EXISTS \`${this.table}\``);
             logger.debug(` Table \`${this.table}\` supprimée`);
             await this.createTable();
         } catch (error) {
@@ -125,7 +125,7 @@ module.exports = class UnrealIRCdChannels {
             if (allColumns.size === 0) return;
 
             // Récupérer les colonnes existantes de la table
-            const result = await execute(`
+            const result = await db.execute(`
                 SELECT COLUMN_NAME 
                 FROM INFORMATION_SCHEMA.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE() 
@@ -146,7 +146,7 @@ module.exports = class UnrealIRCdChannels {
 
                 for (const column of missingColumns) {
                     try {
-                        await execute(`ALTER TABLE \`${this.table}\` ADD COLUMN \`${column}\` TEXT`);
+                        await db.execute(`ALTER TABLE \`${this.table}\` ADD COLUMN \`${column}\` TEXT`);
                         logger.debug(` ➕ Column ${column} added`);
                     } catch (alterError) {
                         logger.debug(`   ❌ Unable to add the column \`${column}\`: ${alterError.message}`);
@@ -164,7 +164,7 @@ module.exports = class UnrealIRCdChannels {
 
     async truncateTable() {
         try {
-            await execute(`TRUNCATE TABLE \`${this.table}\``);
+            await db.execute(`TRUNCATE TABLE \`${this.table}\``);
             logger.debug(`Table ${this.table} cleared`);
         } catch (error) {
             logger.debug(`❌ Error while clearing the table: ${error.message}`);
@@ -238,7 +238,7 @@ module.exports = class UnrealIRCdChannels {
             */
 
             try {
-                await execute(`
+                await db.execute(`
                     INSERT INTO \`${this.table}\`
                     (${columns})
                     VALUES ${placeholders}
@@ -259,7 +259,7 @@ module.exports = class UnrealIRCdChannels {
 
                 for (const channel of normalizedBatch) {
                     try {
-                        await execute(`
+                        await db.execute(`
                             INSERT INTO \`${this.table}\`
                             (${columns})
                             VALUES (${columnsArray.map(() => '?').join(', ')})
@@ -320,7 +320,7 @@ module.exports = class UnrealIRCdChannels {
         try {
 
             // Insertion
-            await execute(`
+            await db.execute(`
             INSERT INTO \`${this.table}\`
             (${columns})
             VALUES (${placeholders})
@@ -361,7 +361,7 @@ module.exports = class UnrealIRCdChannels {
         try {
             if (num_users <= 1) {
 
-                const [result] = await execute(
+                const [result] = await db.execute(
                     `DELETE FROM \`${this.table}\` WHERE \`name\` = ? AND num_users <= 1`,
                     [channel]
                 );
@@ -398,7 +398,7 @@ module.exports = class UnrealIRCdChannels {
      */
     async checkChannelExists(channelName) {
         try {
-            const [rows] = await execute(
+            const [rows] = await db.execute(
                 `SELECT id, num_users FROM \`${this.table}\` WHERE \`name\` = ? LIMIT 1`,
                 [channelName]
             );
@@ -467,7 +467,7 @@ module.exports = class UnrealIRCdChannels {
 
     async getChannelCount() {
         try {
-            const result = await execute(`SELECT COUNT(*) as count FROM \`${this.table}\``);
+            const result = await db.execute(`SELECT COUNT(*) as count FROM \`${this.table}\``);
             return result[0]?.count || 0;
         } catch {
             return 0;
@@ -476,7 +476,7 @@ module.exports = class UnrealIRCdChannels {
 
     async getTableColumns() {
         try {
-            const result = await execute(`
+            const result = await db.execute(`
                 SELECT COLUMN_NAME, DATA_TYPE 
                 FROM INFORMATION_SCHEMA.COLUMNS 
                 WHERE TABLE_SCHEMA = DATABASE() 
@@ -567,7 +567,7 @@ module.exports = class UnrealIRCdChannels {
 
     async num_usersChange(channel, value) {
         const usersTable = config.mysql.table_prefix + 'channels';
-        await execute(
+        await db.execute(
             `UPDATE ${usersTable} SET num_users = ? WHERE name = ? LIMIT 1`,
             [value, channel]
         );

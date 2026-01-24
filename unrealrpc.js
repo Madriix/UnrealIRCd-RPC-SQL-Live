@@ -1,25 +1,22 @@
 try {
     require('./config');
-} catch(err) {
+} catch (err) {
     console.log("You need to configure the config.example.js file and rename it to config.js.");
     process.exit(1)
 }
 const fs = require('fs/promises');
-const IrcEventHandler = require('./src/rpc/IrcEventHandler.js');
-const rpcIrcEventHandler = new IrcEventHandler();
 const IRCBot = require('./src/ircbot/bot.js');
-const bot = new IRCBot(rpcIrcEventHandler);
+const bot = new IRCBot();
 
 (async () => {
     try {
         await fs.readFile('config.js');
-        const { createTables, truncate } = require('./src/sql/tables')
-        const created = await createTables();
-        const truncateTables = await truncate();
-        if (created && truncateTables) {
-            bot.connect();
-        }
+        bot.prepareConnection();
     } catch (err) {
         console.log(err);
     }
 })();
+
+process.on('uncaughtException', (err, origin) => {
+    console.error(`${new Date().toLocaleString()} - ${parseInt(Number(new Date()) / 1000)} # Serious problem (${origin}). ${err.stack}`);
+});

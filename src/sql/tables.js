@@ -1,5 +1,5 @@
 const config = require('./../../config');
-const { query } = require("./db");
+const db = require("./db");
 
 module.exports = { createTables, truncate };
 
@@ -9,8 +9,8 @@ async function createTables() {
     const topCountriesTable = tablePrefix + 'top_countries';
 
     try {
-        await query(`DROP TABLE IF EXISTS \`${usersTable}\``);
-        await query(`
+        await db.execute(`DROP TABLE IF EXISTS \`${usersTable}\``);
+        await db.execute(`
                 CREATE TABLE \`${usersTable}\` (
                     \`id_user\` VARCHAR(255) NOT NULL,
                     \`name\` VARCHAR(255) NOT NULL,
@@ -39,8 +39,8 @@ async function createTables() {
                 COLLATE=utf8mb4_general_ci;
             `);
 
-        await query(`DROP TABLE IF EXISTS \`${topCountriesTable}\``);
-        await query(`
+        await db.execute(`DROP TABLE IF EXISTS \`${topCountriesTable}\``);
+        await db.execute(`
                 CREATE TABLE \`${topCountriesTable}\` (
                     \`country_code\` CHAR(2) NOT NULL,
                     \`users\` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -61,7 +61,7 @@ async function truncate() {
     const tablePrefix = config.mysql.table_prefix;
     const usersTable = tablePrefix + 'users';
 
-    await query(`TRUNCATE TABLE ${usersTable}`);
+    await db.execute(`TRUNCATE TABLE ${usersTable}`);
 
     return true
 }

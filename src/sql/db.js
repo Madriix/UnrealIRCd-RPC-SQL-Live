@@ -1,56 +1,156 @@
-// db.js
 const config = require('./../../config');
-const mysql = require('mysql2/promise')
+const mysql = require('mysql2/promise');
+const EventEmitter = require('events');
 
-let _pool // one pool per app
+const dbEvents = new EventEmitter();
 
-function pool() {
-    if (_pool) return _pool
+let mysqlOnline = true;
+let pool = null;
+let pingInterval = null;
 
-    _pool = mysql.createPool({
-        host: config.mysql.host,
-        user: config.mysql.user,
-        password: config.mysql.password,
-        database: config.mysql.database,
-        waitForConnections: true,
-        connectionLimit: 20,
-        queueLimit: 0,
-        namedPlaceholders: true
-    });
+const dbConfig = {
+    host: config.mysql.host,
+    user: config.mysql.user,
+    password: config.mysql.password,
+    database: config.mysql.database,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    namedPlaceholders: true,
+    connectTimeout: 10000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0
+};
 
-    return _pool
-}
-
-async function query(sql, values) {
-    return await pool().query(sql, values);
-}
-
-async function execute(sql, values) {
-    return await pool().execute(sql, values);
-}
-
-async function getConnection() {
-    return await pool().getConnection();
-}
-
-async function transaction(callback) {
-    const connection = await getConnection();
+async function createPool() {
     try {
-        await connection.beginTransaction();
-        const result = await callback(connection);
-        await connection.commit();
-        return result;
-    } catch (error) {
-        await connection.rollback();
-        throw error;
-    } finally {
-        connection.release(); // IMPORTANT : rendre la connexion au pool
+        console.log(`Tentative de connexion MySQL à ${dbConfig.host}:3306...`);
+
+        pool = mysql.createPool(dbConfig);
+
+        // Tester la connexion immédiatement
+        const connection = await pool.getConnection();
+        console.log('✅ Connexion MySQL établie avec succès');
+        await connection.ping();
+        connection.release();
+
+        mysqlOnline = true;
+        dbEvents.emit('up');
+
+        pool.on('error', (err) => {
+            console.error('Erreur MySQL pool:', err.message);
+            handleMysqlError(err);
+        });
+
+        startPing();
+
+    } catch (err) {
+        console.error('Échec de connexion MySQL:', err.message);
+        mysqlOnline = false;
+        dbEvents.emit('down', err);
     }
 }
 
-module.exports = {
-    query,
-    execute,
-    getConnection,
-    transaction
+async function execute(sql, values) {
+    if (!mysqlOnline || !pool) {
+        throw new Error('MySQL non disponible');
+    }
+
+    try {
+        return await pool.execute(sql, values);
+    } catch (err) {
+        console.error('Erreur execute:', err.message);
+        handleMysqlError(err);
+        throw err;
+    }
 }
+
+async function query(sql, values) {
+    if (!mysqlOnline || !pool) {
+        throw new Error('MySQL non disponible');
+    }
+
+    try {
+        return await pool.query(sql, values);
+    } catch (err) {
+        console.error('Erreur execute:', err.message);
+        handleMysqlError(err);
+        throw err;
+    }
+}
+
+function handleMysqlError(err) {
+    const fatalCodes = [
+        'ECONNREFUSED',
+        'PROTOCOL_CONNECTION_LOST',
+        'ETIMEDOUT',
+        'EHOSTUNREACH',
+        'ENOTFOUND'
+    ];
+
+    if (fatalCodes.includes(err.code)) {
+        console.error(`Erreur fatale MySQL (${err.code}):`, err.message);
+
+        if (mysqlOnline) {
+            mysqlOnline = false;
+            dbEvents.emit('down', err);
+
+            // Détruire le pool existant
+            /*if (pool) {
+                try {
+                    pool.end();
+                } catch (_) { }
+                pool = null;
+            }*/
+        }
+    }
+}
+
+function startPing(intervalMs = 10000) {
+    if (pingInterval) clearInterval(pingInterval);
+
+    pingInterval = setInterval(async () => {
+        if (!pool) return;
+
+        try {
+            const connection = await pool.getConnection();
+            await connection.ping();
+            connection.release();
+
+            if (!mysqlOnline) {
+                mysqlOnline = true;
+                console.log('MySQL reconnecté');
+                dbEvents.emit('up');
+            }
+        } catch (err) {
+            if (mysqlOnline) {
+                console.error('Ping MySQL échoué:', err.message);
+                mysqlOnline = false;
+                dbEvents.emit('down', err);
+            }
+        }
+    }, intervalMs);
+}
+
+function stopPing() {
+    if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+    }
+}
+
+// Initialisation
+createPool();
+
+module.exports = {
+    execute,
+    query,
+    isOnline: () => mysqlOnline,
+    events: dbEvents,
+    startPing,
+    stopPing,
+    getConnection: async () => {
+        if (!mysqlOnline) throw new Error('MySQL non disponible');
+        return pool.getConnection();
+    }
+};
