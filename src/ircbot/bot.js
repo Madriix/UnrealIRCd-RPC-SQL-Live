@@ -39,11 +39,9 @@ class IRCBot {
     }
 
     connect() {
-        if (!this.bot) {
-            this.bot = new IRC.Client();
-            this.IrcEventHandler.setBot(this);
-            this.bot.use(this.MyIrcMiddleware(this));
-        }
+        this.bot = new IRC.Client();
+        this.IrcEventHandler.setBot(this);
+        this.bot.use(this.MyIrcMiddleware(this));
         this.bot.connect({
             ...this.config.ircbot
         });
@@ -129,6 +127,7 @@ class IRCBot {
         if (this.bot) {
             console.log('Disconnecting...');
             this.bot.quit();
+            this.bot = null;
         }
     }
 
