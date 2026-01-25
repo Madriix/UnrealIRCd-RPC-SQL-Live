@@ -53,15 +53,6 @@ Some data is updated every x seconds (`config.mysql.saveInterval`), such as the 
 
 This project is a test; I'm not sure if I'll continue.
 
-
-### Here is the plan of what I would like to do ### 
-
-users :
-<img src="https://gallery.discussionner.com/i/share_3c8c4cf89c55dcb8.png" />
-
-channels :
-<img src="https://gallery.discussionner.com/i/share_8bd9a847d7c3cecc.png" />
-
 ## License ##
 
 This project is under license from MIT.
