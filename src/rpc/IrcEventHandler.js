@@ -2,8 +2,9 @@ const config = require('./../../config');
 const { UnrealIRCdRpc, unrealircdRpc } = require('unrealircd-rpc-node');
 const PQueue = require('p-queue').default;
 const db = require("./../sql/db");
-const top_countries = require('./../sql/top_countries')
-const UnrealIRCdChannels = require('./../sql/channels')
+const top_countries = require('./../sql/top_countries');
+const UnrealIRCdChannels = require('./../sql/channels');
+const { createTables, truncate } = require('./../sql/tables');
 const Logger = require('./../logger/Logger');
 const logger = new Logger();
 
@@ -15,34 +16,37 @@ class IrcEventHandler {
         this.unrealircd_channels = new UnrealIRCdChannels();
         this.usersCount = 0;
         this._users = new Map();
+        this.connection_was_down = false;
+        this.events = db.events;
+        this.bot = null;
+        this.isRunning = true;
 
         // File d'attente unique → pas de conflits DB
         this.queue = new PQueue({ concurrency: 1 });
 
-        this.connection_was_down = false;
-
-        this.events = db.events;
-
-        this.bot = null;
-
         this.events.on('up', async () => {
             if (this.connection_was_down) {
                 console.log('MySQL prêt, démarrage des services...');
-                this.queue.clear();
-                this._users.clear();
-                this.connection_was_down = false;
-                this.bot.disconnect();
-                setTimeout(() => {
-                    this.bot.connectOrReconnect();
-                }, 1000);
+                this.reboot();
             }
         });
 
         this.events.on('down', (err) => {
             console.error('MySQL down:', err.message);
             this.connection_was_down = true;
+            this.isRunning = false;
         });
 
+    }
+
+    async reboot() {
+        this.connection_was_down = false;
+        await createTables();
+        await truncate();
+        this.queue.clear();
+        this._users.clear();
+        this.isRunning = true;
+        this.startInterval();
     }
 
     setBot(bot) {
@@ -191,16 +195,11 @@ class IrcEventHandler {
 
         if (this.connection_was_down && db.isOnline()) {
             console.log('MySQL prêt, démarrage des services...');
-            this.queue.clear();
-            this._users.clear();
-            this.connection_was_down = false;
-            this.bot.disconnect();
-            setTimeout(() => {
-                this.bot.connectOrReconnect();
-            }, 1000);
-
+            this.reboot();
             return;
         }
+
+        if (!this.isRunning) return;
 
 
         const data = JSON.parse(event.tags['unrealircd.org/json-log']);
