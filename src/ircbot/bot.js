@@ -30,7 +30,7 @@ class IRCBot {
         }
     }
 
-    async prepareConnection() {
+    async connectOrReconnect() {
         const created = await createTables();
         const truncateTables = await truncate();
         if (created && truncateTables) {

@@ -11,7 +11,7 @@ const bot = new IRCBot();
 (async () => {
     try {
         await fs.readFile('config.js');
-        bot.prepareConnection();
+        bot.connectOrReconnect();
     } catch (err) {
         console.log(err);
     }

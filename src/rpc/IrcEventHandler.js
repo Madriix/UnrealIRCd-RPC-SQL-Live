@@ -33,7 +33,7 @@ class IrcEventHandler {
                 this.connection_was_down = false;
                 this.bot.disconnect();
                 setTimeout(() => {
-                    this.bot.prepareConnection();
+                    this.bot.connectOrReconnect();
                 }, 1000);
             }
         });
@@ -196,7 +196,7 @@ class IrcEventHandler {
             this.connection_was_down = false;
             this.bot.disconnect();
             setTimeout(() => {
-                this.bot.prepareConnection();
+                this.bot.connectOrReconnect();
             }, 1000);
 
             return;
