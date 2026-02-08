@@ -80,7 +80,9 @@ class IrcEventHandler {
                 ? Math.floor((idleSince - connected) / 1000)
                 : 0,
             user.user?.modes || '',
-            user.user?.channels.join(',') || '',
+            user.user?.channels 
+                ? (user.user?.channels || []).map(c => c?.name ?? c).join(',')
+                : '',
             user.user?.['security-groups']
                 ? Object.values(user.user['security-groups']).join(',')
                 : '',
